@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar } from "./components/Sidebar";
 import { AttendantView } from "./components/AttendantView";
 import { MechanicView } from "./components/MechanicView";
 import { AdminView } from "./components/AdminView";
 import { Bell, Menu, X } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext.tsx";
 
 type UserRole = "admin" | "atendente" | "mecanico";
 
@@ -21,27 +23,39 @@ const NOTIFICATIONS = [
 ];
 
 export default function App() {
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [userName, setUserName] = useState("");
+  // Usando o contexto de autenticação em vez de estado local
+  const { user, isAuthenticated, isLoading, signOut } = useAuth();
+  const navigate = useNavigate();
+  
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
 
-  function handleLogin(r: UserRole, name: string) {
-    setRole(r);
-    setUserName(name);
-    setCurrentPage(DEFAULT_PAGE[r]);
+  // Tela de carregamento enquanto verifica o token
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-blue-600 font-semibold text-lg">Carregando sistema...</div>
+      </div>
+    );
   }
+
+  // Se não estiver autenticado, mostra a tela de login (sem passar props)
+  if (!isAuthenticated || !user) {
+    return <LoginScreen />;
+  }
+
+  // Define o role com base no que veio do backend, com fallback seguro
+  const role = (user.perfil === "admin" || user.perfil === "atendente" || user.perfil === "mecanico") 
+    ? user.perfil 
+    : "atendente";
+
+  const userName = user.nome || "Usuário";
 
   function handleLogout() {
-    setRole(null);
-    setUserName("");
-    setCurrentPage("dashboard");
+    signOut();
+    navigate("/");
     setSidebarOpen(false);
-  }
-
-  if (!role) {
-    return <LoginScreen onLogin={handleLogin} />;
   }
 
   const notifColors: Record<string, string> = {
@@ -53,7 +67,7 @@ export default function App() {
   return (
     <div
       className="flex h-screen overflow-hidden"
-      style={{ background: "#F0F4F8", fontFamily: "var(--font-family)" }}
+      style={{ background: "#F0F4F8", fontFamily: "var(--font-family, sans-serif)" }}
     >
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -106,10 +120,7 @@ export default function App() {
               {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </button>
             <div>
-              <span
-                className="text-sm font-semibold"
-                style={{ color: "#0A0F1A" }}
-              >
+              <span className="text-sm font-semibold" style={{ color: "#0A0F1A" }}>
                 Protótipo ERP
               </span>
               <span className="hidden sm:inline text-xs ml-2 px-2 py-0.5 rounded-full" style={{ background: "#EFF6FF", color: "#2563EB" }}>
@@ -160,7 +171,7 @@ export default function App() {
             {/* User avatar */}
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer"
-              style={{ background: "#1E3A8A", color: "#2563EB" }}
+              style={{ background: "#1E3A8A", color: "#fff" }}
             >
               {userName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
             </div>
@@ -170,10 +181,7 @@ export default function App() {
         {/* Content */}
         <main className="flex-1 overflow-auto">
           {role === "atendente" && (
-            <AttendantView
-              currentPage={currentPage as any}
-              onPageChange={setCurrentPage}
-            />
+            <AttendantView currentPage={currentPage as any} onPageChange={setCurrentPage} />
           )}
           {role === "mecanico" && (
             <MechanicView currentPage={currentPage as any} />
